@@ -3312,24 +3312,33 @@ if (typeof module !== 'undefined') module.exports = Sync;
       })));
     if (f.deel === 'controle') return tekenControle();
     if (f.deel === 'uitleg') return tekenUitleg();
-    var m = S().meta, kopieen = C.dagkopieen();
+    var m = S().meta, kopieen = C.dagkopieen(), webVersie = /^https?:$/.test(location.protocol);
     var bestandInp = h('input', { type: 'file', accept: '.json,application/json', class: 'verborgen', onchange: function () { if (this.files[0]) zetTerug(this.files[0]); this.value = ''; } });
     var samenInp = h('input', { type: 'file', accept: '.json,application/json', class: 'verborgen', onchange: function () { if (this.files[0]) voegSamenMetBestand(this.files[0]); this.value = ''; } });
     inhoud.appendChild(h('div', { class: 'raster' },
       syncKaart(),
       h('section', { class: 'kaart' }, h('header', null, h('h2', null, 'Waar staan je gegevens?')),
         h('div', { style: 'padding:0 16px 16px' },
-          sync.ingelogd() ? h('p', null, h('strong', null, 'Je bent online ingelogd: '), 'je gegevens staan op dit apparaat én online, en komen vanzelf op je andere apparaten. Wat hieronder staat over overstappen met een back-up heb je daardoor niet meer nodig.') : null,
-          h('p', null, 'Alles wat je invoert wordt meteen bewaard in deze browser, op deze computer. Je hoeft niets op te slaan. Sluit je de browser en open je dit bestand later opnieuw, dan staat alles er nog.'),
-          h('p', null, h('strong', null, 'Belangrijk: '), 'de gegevens zitten niet in het bestand zelf. Open je het bestand op een andere computer of in een andere browser, dan zie je daar de begingegevens, niet jouw wijzigingen. Wil je overstappen, maak dan hier een back-up en zet die op de andere computer terug.'),
+          // de uitleg hangt af van de situatie: ingelogd (alles online), de webpagina zonder login, of het losse bestand
+          sync.ingelogd() ? [
+            h('p', null, h('strong', null, 'Online, onder jouw login. '), 'Alles wat je invoert wordt meteen bewaard en staat op elk apparaat waarop je inlogt: laptop, telefoon of tablet. Het maakt niet uit welke browser of welk apparaat je gebruikt.'),
+            h('p', null, 'Geen internet? Dan werk je gewoon door. Je wijzigingen staan op dit apparaat en gaan vanzelf mee zodra je weer bereik hebt. Bovenaan zie je "Online gelijk" als alles is bijgewerkt.'),
+            h('p', null, h('strong', null, 'Op het apparaat van iemand anders? '), 'Klik na afloop op Uitloggen. Anders blijven je gegevens daar in de browser staan.')
+          ] : webVersie ? [
+            h('p', null, h('strong', null, 'Je bent niet ingelogd. '), 'Wat je nu invoert staat alleen in deze browser, op dit apparaat. Log in (hiernaast), dan staat alles online en op al je apparaten.')
+          ] : [
+            h('p', null, 'Alles wat je invoert wordt meteen bewaard in deze browser, op deze computer. Je hoeft niets op te slaan. Sluit je de browser en open je dit bestand later opnieuw, dan staat alles er nog.'),
+            h('p', null, h('strong', null, 'Belangrijk: '), 'de gegevens zitten niet in het bestand zelf. Open je het bestand op een andere computer of in een andere browser, dan zie je daar de begingegevens, niet jouw wijzigingen. ' +
+              (sync.geconfigureerd() ? 'Log in (hiernaast), dan staat alles online en op al je apparaten.' : 'Wil je overstappen, maak dan hier een back-up en zet die op de andere computer terug.'))
+          ],
           h('p', { class: 'klein zacht' }, 'Laatst bewaard: ' + (m.laatstOpgeslagen ? new Date(m.laatstOpgeslagen).toLocaleString('nl-NL') : 'nog niet') + ' · Laatste back-up: ' + (m.laatsteBackup ? NL(m.laatsteBackup) : 'nog nooit')))),
       h('section', { class: 'kaart' }, h('header', null, h('h2', null, 'Back-up en export')),
         h('div', { style: 'padding:0 16px 16px', class: 'knoppenrij' },
-          h('p', { style: 'margin:0 0 8px' }, 'Maak elke week een back-up en zet hem in iCloud, OneDrive of op een USB-stick.'),
+          h('p', { style: 'margin:0 0 8px' }, sync.ingelogd() ? 'Online staat alles al veilig. Een back-up is een extra kopie voor jezelf, bijvoorbeeld één keer per maand.' : 'Maak elke week een back-up en zet hem in iCloud, OneDrive of op een USB-stick.'),
           knop('Back-up maken', maakBackup, 'hoofd'), knop('Exporteren naar Excel', exporteer),
           knop('Back-up terugzetten…', function () { bestandInp.click(); }), bestandInp,
           h('p', { class: 'klein zacht', style: 'margin:8px 0 0' }, 'De back-up (.json) is compleet en kan hier weer worden ingelezen. De Excel-export is om te bekijken, te printen of te delen.'))),
-      h('section', { class: 'kaart' }, h('header', null, h('h2', null, 'Twee apparaten gelijk houden')),
+      sync.ingelogd() ? null : h('section', { class: 'kaart' }, h('header', null, h('h2', null, 'Twee apparaten gelijk houden')),
         h('div', { style: 'padding:0 16px 16px' },
           h('p', { style: 'margin-top:0' }, 'Werk je op twee computers of in twee browsers? Maak op de ene een back-up, zet het bestand op de andere (bijvoorbeeld via AirDrop, iCloud of mail) en kies daar "Samenvoegen". Anders dan terugzetten gooit samenvoegen niets weg: per persoon, afspraak of vinkje wint de laatste wijziging.'),
           h('div', { class: 'knoppenrij' }, knop('Samenvoegen met bestand…', function () { samenInp.click(); }, 'hoofd'), samenInp),
