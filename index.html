@@ -1718,6 +1718,22 @@ var Sync = (function () {
       st.sessie = null; st.verlopen = false; fout = ''; schrijf(); meld();
       if (s && s.access_token) verzoek('/auth/v1/logout', { methode: 'POST', token: s.access_token }).catch(function () {});
     }
+    /* Wachtwoord wijzigen. Eerst opnieuw inloggen met het huidige wachtwoord: dat bewijst dat zij het zelf is
+       (en niet iemand met haar ontgrendelde telefoon) en geeft een verse sessie, die Supabase voor deze stap kan eisen. */
+    function wijzigWachtwoord(huidig, nieuw) {
+      if (!ingelogd() || !st.sessie.email) return Promise.reject(new Error('Log eerst in.'));
+      var email = st.sessie.email;
+      return verzoek('/auth/v1/token?grant_type=password', { methode: 'POST', body: { email: email, password: huidig } }).then(function (j) {
+        bewaarSessie(j, email);
+        return verzoek('/auth/v1/user', { methode: 'PUT', token: j.access_token, body: { password: nieuw } }).then(function () { fout = ''; meld(); return true; }, function (e) {
+          throw new Error(e.code === 'same_password' ? 'Kies een ander wachtwoord dan je huidige.'
+            : e.code === 'weak_password' ? 'Dit wachtwoord is te makkelijk te raden. Kies een langer wachtwoord.'
+            : 'Het wachtwoord is niet gewijzigd: ' + e.message);
+        });
+      }, function (e) {
+        throw new Error(e.status === 400 || e.status === 401 ? 'Je huidige wachtwoord klopt niet.' : 'Het wachtwoord is niet gewijzigd: ' + e.message);
+      });
+    }
     function token() {
       if (!ingelogd()) return Promise.reject(new Error('Niet ingelogd'));
       if (st.sessie.access_token && st.sessie.verloopt - Date.now() > 60000) return Promise.resolve(st.sessie.access_token);
@@ -1850,7 +1866,7 @@ var Sync = (function () {
     /* Na het terugzetten van een back-up: alles opnieuw vergelijken met wat online staat. */
     function opnieuwVergelijken() { st.cursor = null; st.cloudT = {}; schrijf(); }
 
-    return { opnieuwVergelijken: opnieuwVergelijken, geconfigureerd: geconfigureerd, ingelogd: ingelogd, status: status, inloggen: inloggen, uitloggen: uitloggen, sync: sync, plan: plan,
+    return { wijzigWachtwoord: wijzigWachtwoord, opnieuwVergelijken: opnieuwVergelijken, geconfigureerd: geconfigureerd, ingelogd: ingelogd, status: status, inloggen: inloggen, uitloggen: uitloggen, sync: sync, plan: plan,
       teVersturen: teVersturen, laatsteUitkomst: function () { return laatsteUitkomst; } };
   }
   return { maak: maak, SLEUTEL: SLEUTEL };
@@ -3369,7 +3385,7 @@ if (typeof module !== 'undefined') module.exports = Sync;
         h('li', null, h('strong', null, 'Punten bijhouden: '), 'klik op "+ Punten" en vul je Volume Points in. Onder Punten & doelen zie je per maand hoe je ervoor staat richting Supervisor, Active Supervisor en World Team.'),
         h('li', null, h('strong', null, 'Berichtenrondje: '), 'op Vandaag of bij Namen & opvolging. Je kiest een bericht, de naam wordt ingevuld en je loopt de lijst één voor één af. Jij drukt zelf op verzenden in WhatsApp of Instagram; het overzicht houdt bij wie je gehad hebt en telt mee op je actielijst.'),
         h('li', null, h('strong', null, 'Content plannen: '), 'onder Content & berichten. "Vul 2 weken met ideeën" zet een voorstel klaar; zet een item op Geplaatst en het telt mee voor je posts van die week.'),
-        h('li', null, h('strong', null, 'Telefoon en laptop: '), 'log op beide in met hetzelfde e-mailadres en wachtwoord (Back-up & meer). Daarna staat alles vanzelf op beide. Bovenaan zie je "Online gelijk" als alles is bijgewerkt. Zonder internet werk je gewoon door; het gaat mee zodra je weer bereik hebt.'),
+        h('li', null, h('strong', null, 'Telefoon en laptop: '), 'log op beide in met hetzelfde e-mailadres en wachtwoord (Back-up & meer). Daarna staat alles vanzelf op beide. Bovenaan zie je "Online gelijk" als alles is bijgewerkt. Zonder internet werk je gewoon door; het gaat mee zodra je weer bereik hebt. Je wachtwoord wijzig je zelf onder Back-up & meer > Wachtwoord wijzigen. Vraagt een ander apparaat daarna om opnieuw in te loggen, gebruik dan het nieuwe wachtwoord.'),
         h('li', null, h('strong', null, 'Event organiseren: '), 'klik op "+ Event". Open daarna de aanmeldlijst en voeg mensen toe. Per persoon zet je interesse, bevestigd en betaald (cash of betaalverzoek). Onder Events zie je eerstvolgende, afgelopen en toekomstige events.')),
       h('h2', { style: 'margin-top:24px' }, 'De contactkleuren'),
       h('p', null, 'De kleur wordt berekend uit de datum van het laatste echte contact. Een poging (voicemail, appje zonder antwoord) telt niet mee.'),
@@ -3946,7 +3962,10 @@ if (typeof module !== 'undefined') module.exports = Sync;
           h('p', { style: 'margin-top:0' }, S().personen.length ? 'Log in en je gegevens staan ook online. Op je telefoon log je met hetzelfde adres en wachtwoord in en zie je daar hetzelfde.'
             : 'Log in om je gegevens op dit apparaat te zien. Wat je hier invoert, staat daarna ook op je andere apparaten.'),
           h('form', { class: 'login', onsubmit: function (e) {
-            e.preventDefault(); kn.disabled = true; kn.textContent = 'Bezig…'; foutEl.textContent = '';
+            e.preventDefault();
+            // deze browser toont de begingegevens uit het bestand en niet haar eigen opslag: die mogen niet ongemerkt als eerste online komen
+            if (S().meta.nieuwInDezeBrowser && S().personen.length && !confirm('Let op: deze browser opende het overzicht voor het eerst en toont de gegevens uit het bestand, niet wat je daarna zelf hebt ingevoerd.\n\nLog de eerste keer in vanuit de browser waarin je altijd werkt, zodat jouw eigen gegevens online komen. Heb je dat al gedaan, dan kun je hier gerust doorgaan.\n\nHier inloggen?')) return;
+            kn.disabled = true; kn.textContent = 'Bezig…'; foutEl.textContent = '';
             sync.inloggen(email.value, ww.value).then(function (uit) {
               melding(uit ? 'Ingelogd. Alles staat nu online.' : 'Ingelogd'); teken();
             }, function (err) { kn.disabled = false; kn.textContent = 'Inloggen'; foutEl.textContent = err.message; });
@@ -3959,7 +3978,33 @@ if (typeof module !== 'undefined') module.exports = Sync;
         h('p', { class: 'klein zacht' }, s.bezig ? 'Bezig met synchroniseren…' : (s.wachtend ? s.wachtend + (s.wachtend === 1 ? ' wijziging wacht' : ' wijzigingen wachten') + ' op verzenden. ' : 'Alles staat online. ') +
           (s.laatst ? 'Laatst gelijkgezet: ' + new Date(s.laatst).toLocaleString('nl-NL') + '.' : '')),
         h('div', { class: 'knoppenrij' }, knop('Nu synchroniseren', function () { sync.sync().then(function () { teken(); melding(sync.status().fout ? 'Synchroniseren is niet gelukt' : 'Alles is gelijk'); }); }, 'hoofd'),
+          knop('Wachtwoord wijzigen', dlgWachtwoord),
           knop('Uitloggen', function () { if (confirm('Uitloggen op dit apparaat? Je gegevens blijven hier staan, maar worden niet meer bijgewerkt tot je weer inlogt.')) { sync.uitloggen(); teken(); } }))));
+  }
+
+  function dlgWachtwoord() {
+    var ww = function (auto, label) { return h('input', { type: 'password', autocomplete: auto, required: true, 'aria-label': label }); };
+    var huidig = ww('current-password', 'Huidig wachtwoord'), nieuw = ww('new-password', 'Nieuw wachtwoord'), nogmaals = ww('new-password', 'Nieuw wachtwoord nogmaals');
+    var foutEl = h('p', { class: 'waarschuwing', role: 'alert', style: 'margin:10px 0 0' });
+    var toon = h('input', { type: 'checkbox', onchange: function () { [huidig, nieuw, nogmaals].forEach(function (x) { x.type = toon.checked ? 'text' : 'password'; }); } });
+    var opslaanKnop = knop('Wachtwoord wijzigen', opslaan, 'hoofd');
+    function opslaan() {
+      foutEl.textContent = '';
+      if (!huidig.value) { foutEl.textContent = 'Vul je huidige wachtwoord in.'; huidig.focus(); return; }
+      if (nieuw.value.length < 8) { foutEl.textContent = 'Kies een nieuw wachtwoord van minstens 8 tekens.'; nieuw.focus(); return; }
+      if (nieuw.value !== nogmaals.value) { foutEl.textContent = 'De twee nieuwe wachtwoorden zijn niet hetzelfde.'; nogmaals.focus(); return; }
+      opslaanKnop.disabled = true; opslaanKnop.textContent = 'Bezig…';
+      sync.wijzigWachtwoord(huidig.value, nieuw.value).then(function () {
+        sluit(dlg); teken();
+        alert('Je wachtwoord is gewijzigd.\n\nVraagt een ander apparaat je om opnieuw in te loggen, gebruik dan het nieuwe wachtwoord. Je gegevens blijven daar gewoon staan.');
+      }, function (e) { opslaanKnop.disabled = false; opslaanKnop.textContent = 'Wachtwoord wijzigen'; foutEl.textContent = e.message; });
+    }
+    var dlg = dialoog('Wachtwoord wijzigen', [
+      h('p', { class: 'zacht', style: 'margin-top:0' }, 'Je wijzigt het wachtwoord waarmee je op al je apparaten inlogt.'),
+      h('div', { class: 'velden' }, veld('Huidig wachtwoord', huidig, { breed: true }), veld('Nieuw wachtwoord', nieuw, { hulp: 'Minstens 8 tekens. Een zin van een paar woorden is makkelijk te onthouden en moeilijk te raden.' }), veld('Nieuw wachtwoord nogmaals', nogmaals)),
+      h('label', { class: 'vink', style: 'display:inline-flex;gap:6px;align-items:center;margin-top:10px' }, toon, 'Wachtwoorden tonen'), foutEl],
+    [knop('Annuleren', function () { sluit(dlg); }, 'links'), opslaanKnop], { bijEnter: opslaan });
+    huidig.focus();
   }
 
   // ------------------------------------------------------------ Samenvoegen met een ander apparaat
