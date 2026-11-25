@@ -1652,7 +1652,7 @@ var Core = (function () {
 })();
 if (typeof module !== 'undefined') module.exports = Core;
 </script>
-<script id="synccfg" type="application/json">{}</script>
+<script id="synccfg" type="application/json">{"url":"https://fgvaqfbkxhnlrwimnnxp.supabase.co","key":"sb_publishable_PqbSJjyRamY3GjMST7UXLg_mvdJFQVi"}</script>
 <script>/* Online synchronisatie met Supabase. Geen DOM-code, zodat dit ook in Node getest kan worden.
    De app blijft eerst lokaal werken (ook zonder internet); deze module haalt op wat elders is gewijzigd,
    voegt dat samen met Core.voegSamen (per record wint de laatste wijziging) en stuurt de eigen wijzigingen door. */
@@ -1827,7 +1827,7 @@ var Sync = (function () {
         st.laatst = new Date().toISOString(); fout = ''; schrijf();
         return uitkomst;
       }, function (e) {
-        fout = st.verlopen ? 'Je bent uitgelogd. Log opnieuw in.' : /fetch|network|load failed|verbinding/i.test(e.message) ? 'Geen verbinding. Je wijzigingen staan veilig op dit apparaat en gaan mee zodra er weer internet is.' : e.message;
+        fout = st.verlopen ? 'Je bent uitgelogd. Log opnieuw in.' : e.code === 'PGRST205' ? 'De online opslag is nog niet ingericht (de tabel ontbreekt). Je gegevens staan veilig op dit apparaat.' : /fetch|network|load failed|verbinding/i.test(e.message) ? 'Geen verbinding. Je wijzigingen staan veilig op dit apparaat en gaan mee zodra er weer internet is.' : e.message;
         schrijf();
         return null;
       }).then(function (u) {
